@@ -139,26 +139,69 @@ struct TimePickerView: View {
     @Environment(\.dismiss) var dismiss // Umožní zatvoriť sheet
     
     var body: some View {
-        VStack {
-            Text("Nastav čas otočenia (sekundy)")
-                .font(.headline)
-                .padding()
+        ZStack {
+            // Farebné pozadie s jemnejším gradientom
+            LinearGradient(gradient: Gradient(colors: [Color.yellow, Color.orange]),
+                           startPoint: .topLeading,
+                           endPoint: .bottomTrailing)
+                .ignoresSafeArea()
             
-            Stepper(value: $turnTime, in: 10...300, step: 10) {
-                Text("\(turnTime) s")
-                    .font(.title)
+            VStack(spacing: 30) {
+                Text("Nastav čas otočenia")
+                    .font(.system(size: 36))
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                    .padding(.top)
+                
+                // Nastavenie času pomocou vlastných tlačidiel
+                VStack(spacing: 20) {
+                    Text("\(turnTime) sekúnd")
+                        .font(.system(size: 48))
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                    
+                    HStack(spacing: 20) {
+                        // Tlačidlo na zníženie času
+                        Button(action: {
+                            if turnTime > 10 { turnTime -= 10 }
+                        }) {
+                            Image(systemName: "minus.circle.fill")
+                                .font(.system(size: 50))
+                                .foregroundColor(.red)
+                        }
+                        
+                        // Tlačidlo na zvýšenie času
+                        Button(action: {
+                            if turnTime < 300 { turnTime += 10 }
+                        }) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 50))
+                                .foregroundColor(.green)
+                        }
+                    }
+                }
+                
+                // Tlačidlo na zatvorenie
+                Button(action: {
+                    dismiss()
+                }) {
+                    Text("Nastav")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(
+                            LinearGradient(gradient: Gradient(colors: [Color.red, Color.orange]),
+                                           startPoint: .leading,
+                                           endPoint: .trailing)
+                        )
+                        .cornerRadius(15)
+                        .foregroundColor(.white)
+                        .shadow(color: .black.opacity(0.3), radius: 5, x: 0, y: 5)
+                }
+                .padding(.horizontal)
             }
             .padding()
-            
-            Button("Hotovo") {
-                dismiss() // Zatvor výber
-            }
-            .font(.title2)
-            .padding()
-            .background(Color.blue)
-            .foregroundColor(.white)
-            .cornerRadius(10)
         }
-        .padding()
     }
 }
