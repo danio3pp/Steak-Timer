@@ -11,6 +11,7 @@ struct ContentView: View {
     @State private var turnTime: Int = 60
     @State private var maxTurns: Int = 6
     @State private var showTimePicker: Bool = false
+    @State private var showCompletionScreen: Bool = false // Nový stav pre zobrazenie
     
     var body: some View {
         ZStack {
@@ -94,6 +95,11 @@ struct ContentView: View {
                 
                 Spacer()
             }
+            
+            // Obrazovka po dosiahnutí maximálneho počtu otočení
+            if showCompletionScreen {
+                CompletionScreen(showCompletionScreen: $showCompletionScreen)
+            }
         }
     }
     
@@ -124,10 +130,56 @@ struct ContentView: View {
         timer?.invalidate()
         timer = nil
         UIApplication.shared.isIdleTimerDisabled = false
+
+        if totalMinutes >= maxTurns {
+            showCompletionScreen = true // Zobrazí novú obrazovku
+        }
     }
     
     func playSystemSound() {
         AudioServicesPlaySystemSound(1005)
+    }
+}
+
+struct CompletionScreen: View {
+    @Binding var showCompletionScreen: Bool
+
+    var body: some View {
+        ZStack {
+            LinearGradient(gradient: Gradient(colors: [Color.yellow, Color.orange]),
+                           startPoint: .topLeading,
+                           endPoint: .bottomTrailing)
+                .ignoresSafeArea()
+
+            VStack(spacing: 30) {
+                Text("Steak je hotový!")
+                    .font(.system(size: 48))
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                    .padding()
+
+                Button(action: {
+                    showCompletionScreen = false // Zatvorí obrazovku
+                }) {
+                    Text("OK")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            LinearGradient(gradient: Gradient(colors: [Color.red, Color.orange]),
+                                           startPoint: .leading,
+                                           endPoint: .trailing)
+                        )
+                        .cornerRadius(15)
+                        .foregroundColor(.white)
+                        .shadow(color: .black.opacity(0.3), radius: 5, x: 0, y: 5)
+                        .padding(.horizontal)
+                }
+            }
+            .padding()
+        }
     }
 }
 
