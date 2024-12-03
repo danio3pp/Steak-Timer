@@ -1,26 +1,25 @@
 import SwiftUI
 import AVFoundation
-import AudioToolbox // Import pre systémové zvuky
+import AudioToolbox
 
 struct ContentView: View {
-    @State private var timeElapsed: Int = 0 // Uchováva počet sekúnd od aktuálneho štartu
+    @State private var timeElapsed: Int = 0
     @State private var timerRunning: Bool = false
-    @State private var timerMessages: [String] = [] // Ukladá správy o otočeniach
-    @State private var totalMinutes: Int = 0 // Sleduje celkový počet otočení
-    @State private var timer: Timer? = nil // Uchováva časovač
-    @State private var turnTime: Int = 60 // Predvolený čas pre otočenie
-    @State private var showTimePicker: Bool = false // Riadi zobrazenie dialogu pre výber času
+    @State private var timerMessages: [String] = []
+    @State private var totalMinutes: Int = 0
+    @State private var timer: Timer? = nil
+    @State private var turnTime: Int = 60
+    @State private var maxTurns: Int = 6
+    @State private var showTimePicker: Bool = false
     
     var body: some View {
         ZStack {
-            // Farebné pozadie s gradientom
             LinearGradient(gradient: Gradient(colors: [Color.orange, Color.red]),
                            startPoint: .topLeading,
                            endPoint: .bottomTrailing)
                 .ignoresSafeArea()
             
             VStack(spacing: 20) {
-                // Zobrazenie časovača
                 VStack {
                     Text("\(timeElapsed) s")
                         .font(.system(size: 80))
@@ -33,9 +32,8 @@ struct ContentView: View {
                                 .frame(width: 140, height: 140)
                         )
                     
-                    // Ikona na úpravu času pod časovačom
                     Button(action: {
-                        showTimePicker = true // Zobraz výber času
+                        showTimePicker = true
                     }) {
                         Image(systemName: "pencil.circle")
                             .font(.title)
@@ -43,11 +41,10 @@ struct ContentView: View {
                             .shadow(radius: 5)
                     }
                     .sheet(isPresented: $showTimePicker) {
-                        TimePickerView(turnTime: $turnTime)
+                        TimePickerView(turnTime: $turnTime, maxTurns: $maxTurns)
                     }
                 }
                 
-                // Tlačidlo Start
                 Button(action: {
                     if timerRunning {
                         stopTimer()
@@ -55,7 +52,7 @@ struct ContentView: View {
                         startTimer()
                     }
                 }) {
-                    Text(timerRunning ? "Stop" : "Start")
+                    Text(timerRunning ? "Stop" : "Štart")
                         .font(.title)
                         .fontWeight(.bold)
                         .padding()
@@ -67,7 +64,6 @@ struct ContentView: View {
                         .padding(.horizontal)
                 }
                 
-                // Zobrazenie správ o otočeniach
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(alignment: .leading) {
@@ -101,67 +97,66 @@ struct ContentView: View {
         }
     }
     
-    // Spustenie časovača
     func startTimer() {
         timerRunning = true
-        timerMessages = [] // Vyčisti správy pri novom štarte
+        timerMessages = []
         timeElapsed = 0
         totalMinutes = 0
-        UIApplication.shared.isIdleTimerDisabled = true // Zabráni stlmeniu obrazovky
+        UIApplication.shared.isIdleTimerDisabled = true
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
             timeElapsed += 1
-            if timeElapsed == turnTime { // Reset po dosiahnutí nastaveného času
+            if timeElapsed == turnTime {
                 totalMinutes += 1
                 timerMessages.append("\(totalMinutes). otočenie")
-                timeElapsed = 0 // Reset časovača
-                playSystemSound() // Prehraj systémový tón
+                timeElapsed = 0
+                
+                if totalMinutes >= maxTurns {
+                    stopTimer()
+                } else {
+                    playSystemSound()
+                }
             }
         }
     }
     
-    // Zastavenie časovača
     func stopTimer() {
         timerRunning = false
         timer?.invalidate()
         timer = nil
-        UIApplication.shared.isIdleTimerDisabled = false // Obnoví automatické stlmenie obrazovky
+        UIApplication.shared.isIdleTimerDisabled = false
     }
     
-    // Funkcia na prehrávanie systémového zvuku
     func playSystemSound() {
-        AudioServicesPlaySystemSound(1005) // 1005 je kód pre "Mail Sent"
+        AudioServicesPlaySystemSound(1005)
     }
 }
 
-// View pre výber času otočenia
 struct TimePickerView: View {
     @Binding var turnTime: Int
-    @Environment(\.dismiss) var dismiss // Umožní zatvoriť sheet
+    @Binding var maxTurns: Int
+    @Environment(\.dismiss) var dismiss
     
     var body: some View {
         ZStack {
-            // Farebné pozadie s jemnejším gradientom
             LinearGradient(gradient: Gradient(colors: [Color.yellow, Color.orange]),
                            startPoint: .topLeading,
                            endPoint: .bottomTrailing)
                 .ignoresSafeArea()
             
             VStack(spacing: 30) {
-                Text("Nastav čas otočenia")
+                Text("Čas otočenia")
                     .font(.system(size: 36))
                     .fontWeight(.bold)
                     .foregroundColor(.white)
                     .padding(.top)
                 
-                // Nastavenie času pomocou vlastných tlačidiel
                 VStack(spacing: 20) {
-                    Text("\(turnTime) sekúnd")
+                    Text("\(turnTime) s")
                         .font(.system(size: 48))
                         .fontWeight(.semibold)
                         .foregroundColor(.white)
                     
                     HStack(spacing: 20) {
-                        // Tlačidlo na zníženie času
                         Button(action: {
                             if turnTime > 10 { turnTime -= 10 }
                         }) {
@@ -170,7 +165,6 @@ struct TimePickerView: View {
                                 .foregroundColor(.red)
                         }
                         
-                        // Tlačidlo na zvýšenie času
                         Button(action: {
                             if turnTime < 300 { turnTime += 10 }
                         }) {
@@ -181,7 +175,36 @@ struct TimePickerView: View {
                     }
                 }
                 
-                // Tlačidlo na zatvorenie
+                VStack(spacing: 20) {
+                    Text("Počet otočení")
+                        .font(.system(size: 36))
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                    
+                    Text("\(maxTurns)")
+                        .font(.system(size: 48))
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                    
+                    HStack(spacing: 20) {
+                        Button(action: {
+                            if maxTurns > 1 { maxTurns -= 1 }
+                        }) {
+                            Image(systemName: "minus.circle.fill")
+                                .font(.system(size: 50))
+                                .foregroundColor(.red)
+                        }
+                        
+                        Button(action: {
+                            maxTurns += 1
+                        }) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 50))
+                                .foregroundColor(.green)
+                        }
+                    }
+                }
+                
                 Button(action: {
                     dismiss()
                 }) {
