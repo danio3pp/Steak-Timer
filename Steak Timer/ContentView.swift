@@ -9,43 +9,64 @@ struct ContentView: View {
     @State private var totalMinutes: Int = 0
     @State private var timer: Timer? = nil
     @State private var turnTime: Int = 60
-    @State private var maxTurns: Int = 6
+    @State private var maxTurns: Int = 8
     @State private var showTimePicker: Bool = false
     @State private var showCompletionScreen: Bool = false // Nový stav pre zobrazenie
-    
+
     var body: some View {
         ZStack {
             LinearGradient(gradient: Gradient(colors: [Color.orange, Color.red]),
                            startPoint: .topLeading,
                            endPoint: .bottomTrailing)
                 .ignoresSafeArea()
-            
-            VStack(spacing: 20) {
-                VStack {
-                    Text("\(timeElapsed) s")
-                        .font(.system(size: 80))
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                        .padding()
-                        .background(
-                            Circle()
-                                .fill(Color.white.opacity(0.2))
-                                .frame(width: 140, height: 140)
-                        )
-                    
-                    Button(action: {
+
+            if showTimePicker {
+                TimePickerView(turnTime: $turnTime, maxTurns: $maxTurns, showTimePicker: $showTimePicker)
+                    .background(Color.black.opacity(0.5).ignoresSafeArea()) // Polopriehľadné pozadie
+                    .transition(.move(edge: .bottom)) // Animácia
+                    .zIndex(1) // Zabezpečí, že bude na vrchu
+            }
+
+            VStack(spacing: 20) { // Nastavenie rovnakého odstupu
+                // Časovač
+                Text("\(timeElapsed) s")
+                    .font(.system(size: 80))
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                    .padding()
+                    .background(
+                        Circle()
+                            .fill(Color.white.opacity(0.2))
+                            .frame(width: 140, height: 140)
+                    )
+
+                // Tlačidlo na úpravu časovača
+                Button(action: {
+                    withAnimation {
                         showTimePicker = true
-                    }) {
-                        Image(systemName: "pencil.circle")
+                    }
+                }) {
+                    HStack {
+                        Image(systemName: "clock.circle")
                             .font(.title)
-                            .foregroundColor(.yellow)
-                            .shadow(radius: 5)
+                        Text("Upraviť časovač")
+                            .font(.headline)
+                            .fontWeight(.bold)
                     }
-                    .sheet(isPresented: $showTimePicker) {
-                        TimePickerView(turnTime: $turnTime, maxTurns: $maxTurns)
-                    }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(
+                        LinearGradient(gradient: Gradient(colors: [Color.red, Color.orange]),
+                                       startPoint: .leading,
+                                       endPoint: .trailing)
+                    )
+                    .cornerRadius(15)
+                    .foregroundColor(.white)
+                    .shadow(color: .black.opacity(0.3), radius: 5, x: 0, y: 5)
                 }
-                
+                .padding(.horizontal)
+
+                // Tlačidlo štart/stop
                 Button(action: {
                     if timerRunning {
                         stopTimer()
@@ -64,7 +85,8 @@ struct ContentView: View {
                         .foregroundColor(.white)
                         .padding(.horizontal)
                 }
-                
+            
+
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(alignment: .leading) {
@@ -92,17 +114,17 @@ struct ContentView: View {
                 }
                 .frame(maxHeight: 500)
                 .padding(.horizontal)
-                
+
                 Spacer()
             }
-            
+
             // Obrazovka po dosiahnutí maximálneho počtu otočení
             if showCompletionScreen {
                 CompletionScreen(showCompletionScreen: $showCompletionScreen)
             }
         }
     }
-    
+
     func startTimer() {
         timerRunning = true
         timerMessages = []
@@ -115,7 +137,7 @@ struct ContentView: View {
                 totalMinutes += 1
                 timerMessages.append("\(totalMinutes). otočenie")
                 timeElapsed = 0
-                
+
                 if totalMinutes >= maxTurns {
                     stopTimer()
                 } else {
@@ -124,7 +146,7 @@ struct ContentView: View {
             }
         }
     }
-    
+
     func stopTimer() {
         timerRunning = false
         timer?.invalidate()
@@ -135,7 +157,7 @@ struct ContentView: View {
             showCompletionScreen = true // Zobrazí novú obrazovku
         }
     }
-    
+
     func playSystemSound() {
         AudioServicesPlaySystemSound(1005)
     }
@@ -180,91 +202,89 @@ struct CompletionScreen: View {
             }
             .padding()
         }
+        .onAppear {
+            playCompletionSound() // Prehrať zvuk pri zobrazení obrazovky
+        }
+    }
+
+    func playCompletionSound() {
+        AudioServicesPlaySystemSound(1016) // Zvuk "Tweet Sent" (príklad)
     }
 }
 
 struct TimePickerView: View {
     @Binding var turnTime: Int
     @Binding var maxTurns: Int
-    @Environment(\.dismiss) var dismiss
-    
+    @Binding var showTimePicker: Bool // Prenos väzby na zatvorenie obrazovky
+
     var body: some View {
         ZStack {
+            // Gradientné pozadie
             LinearGradient(gradient: Gradient(colors: [Color.yellow, Color.orange]),
                            startPoint: .topLeading,
                            endPoint: .bottomTrailing)
                 .ignoresSafeArea()
-            
+
             VStack(spacing: 30) {
-                Text("Čas otočenia")
+                // Nadpis
+                Text("Nastavenie časovača")
                     .font(.system(size: 36))
                     .fontWeight(.bold)
                     .foregroundColor(.white)
                     .padding(.top)
-                
+
+                // Nastavenie času otočenia
                 VStack(spacing: 20) {
-                    Text("\(turnTime) s")
-                        .font(.system(size: 48))
+                    Text("Čas otočenia: \(formatTurnTime(turnTime))")
+                        .font(.system(size: 24))
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+
+                    Slider(value: Binding(get: {
+                        Double(turnTime)
+                    }, set: { newValue in
+                        turnTime = Int(newValue)
+                    }), in: 10...300, step: 10)
+                        .accentColor(.red)
+                        .padding(.horizontal)
+                }
+
+                // Nastavenie maximálnych otočení
+                VStack(spacing: 20) {
+                    Text("Maximálny počet otočení: \(maxTurns)")
+                        .font(.system(size: 24))
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+
+                    Slider(value: Binding(get: {
+                        Double(maxTurns)
+                    }, set: { newValue in
+                        maxTurns = Int(newValue)
+                    }), in: 1...20, step: 1)
+                        .accentColor(.green)
+                        .padding(.horizontal)
+                }
+
+                // Celkový čas pečenia
+                VStack {
+                    Text("Celkový čas pečenia: \(formatTime(turnTime * maxTurns))")
+                        .font(.system(size: 20))
                         .fontWeight(.semibold)
                         .foregroundColor(.white)
-                    
-                    HStack(spacing: 20) {
-                        Button(action: {
-                            if turnTime > 10 { turnTime -= 10 }
-                        }) {
-                            Image(systemName: "minus.circle.fill")
-                                .font(.system(size: 50))
-                                .foregroundColor(.red)
-                        }
-                        
-                        Button(action: {
-                            if turnTime < 300 { turnTime += 10 }
-                        }) {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.system(size: 50))
-                                .foregroundColor(.green)
-                        }
-                    }
+                        .padding(.top)
                 }
-                
-                VStack(spacing: 20) {
-                    Text("Počet otočení")
-                        .font(.system(size: 36))
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                    
-                    Text("\(maxTurns)")
-                        .font(.system(size: 48))
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
-                    
-                    HStack(spacing: 20) {
-                        Button(action: {
-                            if maxTurns > 1 { maxTurns -= 1 }
-                        }) {
-                            Image(systemName: "minus.circle.fill")
-                                .font(.system(size: 50))
-                                .foregroundColor(.red)
-                        }
-                        
-                        Button(action: {
-                            maxTurns += 1
-                        }) {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.system(size: 50))
-                                .foregroundColor(.green)
-                        }
-                    }
-                }
-                
+
+                // Tlačidlo potvrdenia
                 Button(action: {
-                    dismiss()
+                    withAnimation {
+                        showTimePicker = false // Manuálne zatvorenie obrazovky
+                    }
                 }) {
-                    Text("Nastav")
+                    Text("Potvrdiť")
                         .font(.title2)
                         .fontWeight(.bold)
-                        .frame(maxWidth: .infinity)
                         .padding()
+                        .frame(maxWidth: .infinity)
                         .background(
                             LinearGradient(gradient: Gradient(colors: [Color.red, Color.orange]),
                                            startPoint: .leading,
@@ -277,6 +297,24 @@ struct TimePickerView: View {
                 .padding(.horizontal)
             }
             .padding()
+        }
+    }
+
+    // Funkcia na formátovanie celkového času
+    func formatTime(_ totalSeconds: Int) -> String {
+        let minutes = totalSeconds / 60
+        let seconds = totalSeconds % 60
+        return "\(minutes) min \(seconds) s"
+    }
+
+    // Funkcia na formátovanie času otočenia
+    func formatTurnTime(_ seconds: Int) -> String {
+        if seconds >= 60 {
+            let minutes = seconds / 60
+            let remainingSeconds = seconds % 60
+            return "\(minutes) min \(remainingSeconds) s"
+        } else {
+            return "\(seconds) s"
         }
     }
 }
