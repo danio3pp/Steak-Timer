@@ -3,17 +3,13 @@ import AVFoundation
 import AudioToolbox
 
 struct ContentView: View {
-    @State private var timeElapsed: Int = 0
-    @State private var timerRunning: Bool = false
-    @State private var timerMessages: [String] = []
-    @State private var totalMinutes: Int = 0
-    @State private var timer: Timer? = nil
-    @State private var turnTime: Int = 60
-    @State private var maxTurns: Int = 8
+    @State private var timerModel = SteakTimerModel()
     @State private var showTimePicker: Bool = false
-    @State private var showCompletionScreen: Bool = false // Nový stav pre zobrazenie
+    @State private var showCompletionScreen: Bool = false
 
     var body: some View {
+        @Bindable var timerModel = timerModel
+
         ZStack {
             LinearGradient(gradient: Gradient(colors: [Color.orange, Color.red]),
                            startPoint: .topLeading,
@@ -21,26 +17,60 @@ struct ContentView: View {
                 .ignoresSafeArea()
 
             if showTimePicker {
-                TimePickerView(turnTime: $turnTime, maxTurns: $maxTurns, showTimePicker: $showTimePicker)
-                    .background(Color.black.opacity(0.5).ignoresSafeArea()) // Polopriehľadné pozadie
-                    .transition(.move(edge: .bottom)) // Animácia
-                    .zIndex(1) // Zabezpečí, že bude na vrchu
+                TimePickerView(
+                    turnTime: $timerModel.turnTime,
+                    maxTurns: $timerModel.maxTurns,
+                    showTimePicker: $showTimePicker
+                )
+                    .background(Color.black.opacity(0.5).ignoresSafeArea())
+                    .transition(.move(edge: .bottom))
+                    .zIndex(1)
             }
 
-            VStack(spacing: 20) { // Nastavenie rovnakého odstupu
-                // Časovač
-                Text("\(timeElapsed) s")
-                    .font(.system(size: 80))
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
-                    .padding()
-                    .background(
-                        Circle()
-                            .fill(Color.white.opacity(0.2))
-                            .frame(width: 140, height: 140)
-                    )
+            VStack(spacing: 20) {
+                VStack(spacing: 12) {
+                    Text("Otočka \(timerModel.upcomingTurn) z \(timerModel.maxTurns)")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white.opacity(0.9))
 
-                // Tlačidlo na úpravu časovača
+                    ZStack {
+                        Circle()
+                            .stroke(Color.white.opacity(0.18), lineWidth: 16)
+                            .frame(width: 220, height: 220)
+
+                        Circle()
+                            .trim(from: 0, to: timerModel.turnProgress)
+                            .stroke(
+                                Color.white,
+                                style: StrokeStyle(lineWidth: 16, lineCap: .round)
+                            )
+                            .frame(width: 220, height: 220)
+                            .rotationEffect(.degrees(-90))
+                            .animation(.easeInOut(duration: 0.25), value: timerModel.turnProgress)
+
+                        VStack(spacing: 6) {
+                            Text(timerModel.formatClock(timerModel.timeRemaining))
+                                .font(.system(size: 54, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+
+                            Text("do ďalšej otočky")
+                                .font(.headline)
+                                .foregroundColor(.white.opacity(0.85))
+                        }
+                    }
+
+                    VStack(spacing: 4) {
+                        Text("Zostáva spolu \(timerModel.formatClock(timerModel.totalRemainingTime))")
+                            .font(.headline)
+                            .foregroundColor(.white)
+
+                        Text("Jedna otočka trvá \(timerModel.formatTurnTime(timerModel.turnTime))")
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.82))
+                    }
+                }
+
                 Button(action: {
                     withAnimation {
                         showTimePicker = true
@@ -65,34 +95,54 @@ struct ContentView: View {
                     .shadow(color: .black.opacity(0.3), radius: 5, x: 0, y: 5)
                 }
                 .padding(.horizontal)
+                .disabled(timerModel.timerRunning)
+                .opacity(timerModel.timerRunning ? 0.55 : 1)
 
-                // Tlačidlo štart/stop
-                Button(action: {
-                    if timerRunning {
-                        stopTimer()
-                    } else {
-                        startTimer()
+                HStack(spacing: 12) {
+                    Button(action: {
+                        if timerModel.timerRunning {
+                            timerModel.pauseTimer()
+                        } else {
+                            timerModel.startTimer()
+                        }
+                    }) {
+                        Text(timerModel.startButtonTitle)
+                            .font(.title3)
+                            .fontWeight(.bold)
+                            .padding()
+                            .frame(maxWidth: .infinity)
+                            .background(timerModel.timerRunning ? Color.red : Color.green)
+                            .cornerRadius(15)
+                            .shadow(color: .black.opacity(0.2), radius: 5, x: 0, y: 5)
+                            .foregroundColor(.white)
                     }
-                }) {
-                    Text(timerRunning ? "Stop" : "Štart")
-                        .font(.title)
-                        .fontWeight(.bold)
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(timerRunning ? Color.red : Color.green)
-                        .cornerRadius(15)
-                        .shadow(color: .black.opacity(0.2), radius: 5, x: 0, y: 5)
-                        .foregroundColor(.white)
-                        .padding(.horizontal)
+
+                    Button(action: {
+                        timerModel.resetTimer()
+                        showCompletionScreen = false
+                    }) {
+                        Text("Reset")
+                            .font(.title3)
+                            .fontWeight(.bold)
+                            .padding()
+                            .frame(maxWidth: .infinity)
+                            .background(Color.white.opacity(0.18))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 15)
+                                    .stroke(Color.white.opacity(0.35), lineWidth: 1)
+                            )
+                            .cornerRadius(15)
+                            .foregroundColor(.white)
+                    }
                 }
-            
+                .padding(.horizontal)
 
                 ScrollViewReader { proxy in
                     ScrollView {
-                        VStack(alignment: .leading) {
-                            ForEach(timerMessages, id: \.self) { message in
+                        VStack(alignment: .leading, spacing: 10) {
+                            ForEach(timerModel.timerMessages, id: \.self) { message in
                                 Text(message)
-                                    .font(.system(size: 60))
+                                    .font(.system(size: 26, weight: .medium, design: .rounded))
                                     .fontWeight(.medium)
                                     .foregroundColor(.white)
                                     .padding(.vertical, 5)
@@ -103,8 +153,8 @@ struct ContentView: View {
                                     )
                             }
                         }
-                        .onChange(of: timerMessages) { _, _ in
-                            if let lastMessage = timerMessages.last {
+                        .onChange(of: timerModel.timerMessages) { _, _ in
+                            if let lastMessage = timerModel.timerMessages.last {
                                 withAnimation {
                                     proxy.scrollTo(lastMessage, anchor: .bottom)
                                 }
@@ -112,49 +162,25 @@ struct ContentView: View {
                         }
                     }
                 }
-                .frame(maxHeight: 500)
+                .frame(maxHeight: 260)
                 .padding(.horizontal)
 
                 Spacer()
             }
+            .padding(.top, 24)
 
-            // Obrazovka po dosiahnutí maximálneho počtu otočení
             if showCompletionScreen {
                 CompletionScreen(showCompletionScreen: $showCompletionScreen)
             }
         }
-    }
+        .onChange(of: timerModel.completedTurns) { oldValue, newValue in
+            guard newValue > oldValue else { return }
 
-    func startTimer() {
-        timerRunning = true
-        timerMessages = []
-        timeElapsed = 0
-        totalMinutes = 0
-        UIApplication.shared.isIdleTimerDisabled = true
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            timeElapsed += 1
-            if timeElapsed == turnTime {
-                totalMinutes += 1
-                timerMessages.append("\(totalMinutes). otočenie")
-                timeElapsed = 0
-
-                if totalMinutes >= maxTurns {
-                    stopTimer()
-                } else {
-                    playSystemSound()
-                }
+            if newValue >= timerModel.maxTurns {
+                showCompletionScreen = true
+            } else {
+                playSystemSound()
             }
-        }
-    }
-
-    func stopTimer() {
-        timerRunning = false
-        timer?.invalidate()
-        timer = nil
-        UIApplication.shared.isIdleTimerDisabled = false
-
-        if totalMinutes >= maxTurns {
-            showCompletionScreen = true // Zobrazí novú obrazovku
         }
     }
 
@@ -215,25 +241,22 @@ struct CompletionScreen: View {
 struct TimePickerView: View {
     @Binding var turnTime: Int
     @Binding var maxTurns: Int
-    @Binding var showTimePicker: Bool // Prenos väzby na zatvorenie obrazovky
+    @Binding var showTimePicker: Bool
 
     var body: some View {
         ZStack {
-            // Gradientné pozadie
             LinearGradient(gradient: Gradient(colors: [Color.yellow, Color.orange]),
                            startPoint: .topLeading,
                            endPoint: .bottomTrailing)
                 .ignoresSafeArea()
 
             VStack(spacing: 30) {
-                // Nadpis
                 Text("Nastavenie časovača")
                     .font(.system(size: 36))
                     .fontWeight(.bold)
                     .foregroundColor(.white)
                     .padding(.top)
 
-                // Nastavenie času otočenia
                 VStack(spacing: 20) {
                     Text("Čas otočenia: \(formatTurnTime(turnTime))")
                         .font(.system(size: 24))
@@ -249,7 +272,6 @@ struct TimePickerView: View {
                         .padding(.horizontal)
                 }
 
-                // Nastavenie maximálnych otočení
                 VStack(spacing: 20) {
                     Text("Maximálny počet otočení: \(maxTurns)")
                         .font(.system(size: 24))
@@ -265,7 +287,6 @@ struct TimePickerView: View {
                         .padding(.horizontal)
                 }
 
-                // Celkový čas pečenia
                 VStack {
                     Text("Celkový čas pečenia: \(formatTime(turnTime * maxTurns))")
                         .font(.system(size: 20))
@@ -274,10 +295,9 @@ struct TimePickerView: View {
                         .padding(.top)
                 }
 
-                // Tlačidlo potvrdenia
                 Button(action: {
                     withAnimation {
-                        showTimePicker = false // Manuálne zatvorenie obrazovky
+                        showTimePicker = false
                     }
                 }) {
                     Text("Potvrdiť")
@@ -300,14 +320,12 @@ struct TimePickerView: View {
         }
     }
 
-    // Funkcia na formátovanie celkového času
     func formatTime(_ totalSeconds: Int) -> String {
         let minutes = totalSeconds / 60
         let seconds = totalSeconds % 60
         return "\(minutes) min \(seconds) s"
     }
 
-    // Funkcia na formátovanie času otočenia
     func formatTurnTime(_ seconds: Int) -> String {
         if seconds >= 60 {
             let minutes = seconds / 60
