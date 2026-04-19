@@ -18,6 +18,12 @@ final class WatchSteakTimerModel {
 
     @ObservationIgnored
     private var timer: Timer?
+    @ObservationIgnored
+    private var runStartedAt: Date?
+    @ObservationIgnored
+    private var runStartedRemaining: Int = 0
+    @ObservationIgnored
+    private var runStartedCompletedTurns: Int = 0
 
     init(turnTime: Int = 60, maxTurns: Int = 8) {
         self.turnTime = turnTime
@@ -46,37 +52,74 @@ final class WatchSteakTimerModel {
     func startTimer() {
         guard timer == nil else { return }
         timerRunning = true
+        runStartedAt = Date()
+        runStartedRemaining = timeRemaining
+        runStartedCompletedTurns = completedTurns
 
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             guard let self else { return }
-
-            if self.timeRemaining > 1 {
-                self.timeRemaining -= 1
-            } else {
-                self.completedTurns += 1
-                WKInterfaceDevice.current().play(.notification)
-
-                if self.completedTurns >= self.maxTurns {
-                    self.pauseTimer()
-                    self.timeRemaining = 0
-                    WKInterfaceDevice.current().play(.success)
-                } else {
-                    self.timeRemaining = self.turnTime
-                }
-            }
+            self.refreshFromWallClock()
         }
     }
 
     func pauseTimer() {
+        refreshFromWallClock()
         timerRunning = false
         timer?.invalidate()
         timer = nil
+        runStartedAt = nil
+        runStartedRemaining = 0
+        runStartedCompletedTurns = 0
     }
 
     func resetTimer() {
         pauseTimer()
         completedTurns = 0
         timeRemaining = turnTime
+    }
+
+    func refreshFromWallClock() {
+        guard timerRunning, let startedAt = runStartedAt else { return }
+
+        let elapsed = Int(Date().timeIntervalSince(startedAt))
+        let turnsBefore = completedTurns
+
+        let turnsCompletedThisRun: Int
+        let remaining: Int
+
+        if elapsed < runStartedRemaining {
+            turnsCompletedThisRun = 0
+            remaining = runStartedRemaining - elapsed
+        } else {
+            let elapsedAfterFirstTurn = elapsed - runStartedRemaining
+            let extraFullTurns = elapsedAfterFirstTurn / turnTime
+            let remainder = elapsedAfterFirstTurn % turnTime
+
+            turnsCompletedThisRun = 1 + extraFullTurns
+            remaining = remainder == 0 ? turnTime : (turnTime - remainder)
+        }
+
+        let totalTurns = runStartedCompletedTurns + turnsCompletedThisRun
+
+        if totalTurns >= maxTurns {
+            completedTurns = maxTurns
+            timerRunning = false
+            timer?.invalidate()
+            timer = nil
+            timeRemaining = 0
+            runStartedAt = nil
+            runStartedRemaining = 0
+            runStartedCompletedTurns = 0
+            WKInterfaceDevice.current().play(.success)
+            return
+        }
+
+        completedTurns = totalTurns
+        timeRemaining = max(1, remaining)
+
+        if completedTurns > turnsBefore {
+            WKInterfaceDevice.current().play(.notification)
+        }
     }
 
     func formatClock(_ totalSeconds: Int) -> String {
@@ -89,6 +132,8 @@ final class WatchSteakTimerModel {
 struct ContentView: View {
     @State private var timerModel = WatchSteakTimerModel()
     @State private var showSettings = false
+    @Environment(\.scenePhase) private var scenePhase
+    private let topAnchorId = "watchTopAnchor"
 
     var body: some View {
         @Bindable var timerModel = timerModel
@@ -99,8 +144,13 @@ struct ContentView: View {
             let timerFontSize = max(24, min(32, width * 0.16))
             let rowPadding = max(8, min(10, width * 0.045))
 
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 10) {
+            ScrollViewReader { proxy in
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 10) {
+                        Color.clear
+                            .frame(height: 0)
+                            .id(topAnchorId)
+
                     ZStack {
                         Circle()
                             .stroke(Color.white.opacity(0.18), lineWidth: 9)
@@ -196,6 +246,9 @@ struct ContentView: View {
                                 timerModel.pauseTimer()
                             } else {
                                 timerModel.startTimer()
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    proxy.scrollTo(topAnchorId, anchor: .top)
+                                }
                             }
                         }) {
                             Text(timerModel.startButtonTitle)
@@ -219,10 +272,11 @@ struct ContentView: View {
                         }
                         .buttonStyle(.plain)
                     }
+                    }
+                    .padding(.horizontal, max(10, width * 0.07))
+                    .padding(.top, 0.01)
+                    .padding(.bottom, 80)
                 }
-                .padding(.horizontal, max(10, width * 0.07))
-                .padding(.top, 0.01)
-                .padding(.bottom, 80)
             }
         }
         .background(
@@ -233,6 +287,11 @@ struct ContentView: View {
             )
             .ignoresSafeArea()
         )
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
+                timerModel.refreshFromWallClock()
+            }
+        }
     }
 
     @ViewBuilder
@@ -244,17 +303,34 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 6) {
-                tinyActionButton(symbol: "minus", action: onMinus)
+                tinyActionButton(symbol: "chevron.left", action: onMinus)
                 Text(value)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.white)
                     .frame(minWidth: 38)
-                tinyActionButton(symbol: "plus", action: onPlus)
+                tinyActionButton(symbol: "chevron.right", action: onPlus)
             }
         }
+        Text("swipe < >")
+            .font(.caption2)
+            .foregroundStyle(.white.opacity(0.6))
+            .frame(maxWidth: .infinity, alignment: .trailing)
         .padding(8)
         .background(Color.white.opacity(0.12))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        .contentShape(RoundedRectangle(cornerRadius: 12))
+        .gesture(
+            DragGesture(minimumDistance: 18)
+                .onEnded { value in
+                    guard abs(value.translation.width) > abs(value.translation.height) else { return }
+
+                    if value.translation.width > 24 {
+                        onPlus()
+                    } else if value.translation.width < -24 {
+                        onMinus()
+                    }
+                }
+        )
     }
 
     @ViewBuilder
